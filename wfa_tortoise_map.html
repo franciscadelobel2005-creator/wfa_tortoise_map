@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WFA Tortoise Sample Map</title>
+  <!-- Leaflet CSS (no integrity attribute to avoid loading issues) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body, html, #map { height: 100%; margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+    .legend { background: white; padding: 6px; border-radius: 6px; box-shadow: 0 0 6px rgba(0,0,0,0.2);} 
+    #error { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <!-- Visible error area (hidden unless an error occurs) -->
+  <div id="error" style="position: absolute; top: 12px; left: 12px; z-index: 9999; background: rgba(255,255,255,0.95); padding:8px 10px; border-radius:6px; display:none; box-shadow:0 1px 4px rgba(0,0,0,0.2);"></div>
+
+  <script>
+    (function () {
+      // URL to Leaflet JS (no integrity attribute to avoid mismatch issues)
+      const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+
+      function showError(message) {
+        const el = document.getElementById('error');
+        el.textContent = message;
+        el.style.display = 'block';
+        console.error(message);
+      }
+
+      function initMap() {
+        if (typeof L === 'undefined') {
+          showError('Leaflet (L) is not available. Map cannot be initialized.');
+          return;
+        }
+
+        // --- SAMPLES DATA ---
+        // Note: samples 3 and 5 use estimated coordinates for plotting only; those numeric coords are NOT shown in the popup per request.
+        const samples = [
+          {id:1, species:'Angulate tortoise', collector:'James Morton', location:'Pelican Park', date:'Unknown', lat:-34.07715565, lon:18.5376494, coords_visible:true},
+          {id:2, species:'Angulate tortoise', collector:'James Morton', location:'Pelican Park', date:'Unknown', lat:-34.0759806, lon:18.5335064, coords_visible:true},
+          // Joostenberg Kloof: estimated placement (used only to plot the point). Coordinates will NOT be shown in popup.
+          {id:3, species:'Unknown', collector:'Jacques van der Merwe', location:'Joostenberg Kloof', date:'27/02/2025', lat:-33.826861, lon:18.7333671, coords_visible:false},
+          {id:4, species:'Unknown', collector:'Dalton Gibbs', location:'Unknown', date:'01/04/2025', lat:-33.788772, lon:18.515610, coords_visible:true},
+          // Rietvlei, Table Bay Nature Reserve: estimated placement (used only to plot the point). Coordinates will NOT be shown in popup.
+          {id:5, species:'Angulate tortoise', collector:'Dalton Gibbs', location:'Rietvlei, Table Bay Nature Reserve', date:'18/12/2024', lat:-33.84579, lon:18.50039, coords_visible:false},
+          {id:6, species:'Unknown', collector:'Unknown', location:'Blaauwberg Nature Reserve', date:'17/03/2025', lat:-33.75276, lon:18.47155, coords_visible:true},
+          {id:7, species:'Angulate tortoise', collector:'Tristan Daniels', location:'Pelican Park', date:'Unknown', lat:-34.081944, lon:18.537778, coords_visible:true},
+          {id:8, species:'Unknown', collector:'Dalton Gibbs', location:'Unknown', date:'01/04/2025', lat:-33.7888195, lon:18.534584, coords_visible:true}
+        ];
+
+        // --- create map ---
+        const map = L.map('map').setView([-34.0, 18.53], 11);
+
+        // base layer
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // optional satellite layer (from Esri)
+        const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri'
+        });
+
+        // Add markers
+        const markers = L.layerGroup();
+        samples.forEach(s => {
+          // guard: ensure lat/lon are valid numbers before creating marker
+          if (typeof s.lat !== 'number' || typeof s.lon !== 'number' || isNaN(s.lat) || isNaN(s.lon)) {
+            console.warn(`Skipping sample ${s.id} — invalid coordinates`);
+            return;
+          }
+
+          const marker = L.marker([s.lat, s.lon]);
+
+          // build popup content
+          let popup = `<strong>Sample #${s.id}</strong><br>` +
+                      `<em>Species:</em> ${s.species}<br>` +
+                      `<em>Collector:</em> ${s.collector}<br>` +
+                      `<em>Location:</em> ${s.location}<br>` +
+                      `<em>Date:</em> ${s.date}<br>`;
+
+          if (s.coords_visible) {
+            popup += `<em>Coordinates:</em> ${s.lat.toFixed(6)}°, ${s.lon.toFixed(6)}°`;
+          } else {
+            popup += `<em>Coordinates:</em> (not displayed — estimated for plotting)`;
+          }
+
+          marker.bindPopup(popup);
+          markers.addLayer(marker);
+        });
+
+        markers.addTo(map);
+
+        // Fit map to markers (only if there are markers)
+        if (markers.getLayers().length > 0) {
+          try {
+            map.fitBounds(markers.getBounds(), {padding:[40,40]});
+          } catch (err) {
+            console.warn('fitBounds failed:', err);
+          }
+        }
+
+        // layer control
+        const baseMaps = {"OpenStreetMap": osm, "Satellite (Esri)": esriSat};
+        const overlayMaps = {"Samples": markers};
+        L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+        // add simple legend
+        const legend = L.control({position:'bottomright'});
+        legend.onAdd = function () {
+          const div = L.DomUtil.create('div','legend');
+          div.innerHTML = '<strong>WFA Tortoise Samples</strong><br>Click markers for details.<br><br><small>Notes:<br>- Samples 3 &amp; 5 were placed using estimated coordinates; those numeric coords are intentionally <strong>not</strong> shown in the popup.</small>';
+          return div;
+        };
+        legend.addTo(map);
+
+        // Success — hide any previous error
+        const errEl = document.getElementById('error');
+        if (errEl) errEl.style.display = 'none';
+      }
+
+      function loadScript(src, cb) {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+          // if already present and loaded, try to init
+          if (typeof L !== 'undefined') cb();
+          else {
+            existing.addEventListener('load', cb);
+            existing.addEventListener('error', function(){ showError('Failed to load Leaflet script.'); });
+          }
+          return;
+        }
+
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.onload = cb;
+        s.onerror = function () { showError('Failed to load Leaflet script from ' + src); };
+        document.head.appendChild(s);
+      }
+
+      // Start: ensure Leaflet is loaded before calling initMap
+      if (typeof L === 'undefined') {
+        loadScript(LEAFLET_JS, initMap);
+      } else {
+        initMap();
+      }
+    })();
+  </script>
+</body>
+</html>
